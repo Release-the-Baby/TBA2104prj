@@ -1,0 +1,670 @@
+---
+title: "Movie Database"
+output: 
+  html_notebook:
+    theme: united
+    toc: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## Environment Setup
+
+```{r libs}
+
+library(dplyr)
+library(rpart)
+library(caret)
+library(rpart.plot)
+library(stringr)
+
+```
+
+## Load-in
+
+```{r loadIn}
+
+movieDB <- read.csv('../data/biggie/biggieFiltered.tsv', sep = '\t', header = TRUE)
+
+```
+
+## Explore
+
+make some viz
+
+*Reference:\
+(1)
+[https://medium.com/\@srimalashish/why-eda-is-necessary-for-machine-learning-233b6e4d5083](https://medium.com/@srimalashish/why-eda-is-necessary-for-machine-learning-233b6e4d5083){.uri}[\
+(2](https://medium.com/@srimalashish/why-eda-is-necessary-for-machine-learning-233b6e4d5083￼(2))<https://stackoverflow.com/questions/1828742/rotating-axis-labels-in-r>*
+
+### General
+
+```{r groupViz}
+
+
+dummy.0 <- movieDB %>% count(genres, sort = TRUE)
+print(paste("count of genres: ", length(dummy.0$genres)))
+
+dummy.0 <- movieDB %>% count(startYear, sort = TRUE)
+table(dummy.0)
+print(paste("count of Years: ", length(dummy.0$startYear)))
+par(mar = c(2,4,2,2))
+plot(dummy.0$startYear,
+     dummy.0$n,
+     yaxt="n",
+     ylab = 'count of movies',
+     xlab = 'Year',     
+     main ='Count of movies in Year')
+axis(2, las = 2)
+text(x= 1950, 
+     y= 2000, 
+     pos = 4,
+     labels= "More data after 2000\nreflect recent history",
+     col ='darkcyan')
+
+
+dummy.0 <- movieDB %>% count(genres, sort = TRUE)
+dummy.0<- dummy.0[1:15,]
+dummy.1<- order(-dummy.0$n)
+dummy.0<-dummy.0[dummy.1,]
+dummy.0$genres <- as.factor(dummy.0$genres)
+
+dummy.0
+
+
+par(mar = c(12,5,2,2))
+plot(dummy.0$genres,
+     dummy.0$n,
+     xlab ='',
+     ylab = '',     
+     las = 2, # 2: always perpendicular to the axis,
+     main = '15 most popular genre by movies made')
+text(x= 3.5, 
+     y= 6000, 
+     pos = 4,
+     labels= "Top 2: Drama and Comedy\nGenre count: 840\nAggregate sub-genre",
+     col ='darkcyan')
+
+dummy.0 <- movieDB %>% count(averageRating,numVotes)
+dummy.1 <- order(-dummy.0$averageRating)
+dummy.0 <- dummy.0[dummy.1,]
+
+
+par(mar = c(4,4,2,2))
+plot(dummy.0$averageRating,
+     dummy.0$numVotes,
+     yaxt='n',
+     ylab = '',
+     xlab = 'avg rating',
+     main = 'votes by avgRating')
+axis(2, las = 2)
+text(x= 0.5, 
+     y= 800000, 
+     col = 'darkcyan',
+     pos= 4,
+     labels= "peak around rating 8\nsharp decline after\npeople upvote, not downvote\npotential problem: cannot capture low rating factors")
+
+
+```
+
+# Comedy
+
+### Group minor Comedy genres
+
+```{r  breakComedyFromMain}
+
+s.comedyGrp <- movieDB %>%filter(grepl('Comedy',genres))
+print(paste('count of comedy grouped movies: ',format(
+  length(s.comedyGrp$tconst),
+  big.mark = ',',
+  scientific = FALSE)))
+
+dummy.0 <- s.comedyGrp %>% count(genres, sort = TRUE)
+dummy.0$genres <- as.factor(dummy.0$genres)
+par(mar = c(13,4,2,2))
+barplot(sort(dummy.0$n, decreasing = TRUE),
+        names.arg = dummy.0$genre,
+        cex.axis = 0.5, 
+        # col = c('cornsilk', 'cornsilk', 'cornsilk',
+        #         'cornsilk', 'cornsilk', 'cornsilk',
+        #         'cornsilk',
+        #         'azure', 'azure','azure','azure',
+        #         'azure', 'azure','azure','azure'),
+        main = 'Movie count by Comedy sub-genre',
+        las = 2)
+
+```
+
+### Aggregate
+
+```{r vizGroupedComedySort}
+
+
+#dummy.0 <- dummy.0 %>% count(directors, numVotes, averageRating, sort = TRUE)
+
+
+dummy.0 <- s.comedyGrp %>% count(genres, sort = TRUE)
+dummy.0<- dummy.0[1:15,]
+dummy.1<- order(-dummy.0$n)
+dummy.0<-dummy.0[dummy.1,]
+dummy.0$genres <- as.factor(dummy.0$genres)
+
+dummy.0
+
+par(mar = c(12,5,2,2))
+plot(dummy.0$genres,
+     dummy.0$n,
+     las = 2, # 2: always perpendicular to the axis,
+     ylab = '',
+     xlab = '',     
+     main = '15 most popular genre[comedy grouped] by count')
+
+s.cdyDrama <- s.comedyGrp %>%
+  filter(grepl('Drama',genres))
+s.cdyDrama$genres <- 'C.Drama'
+dummy.0 <- s.comedyGrp %>%
+  filter(!grepl('Drama',genres))
+
+s.cdyCrime <- dummy.0 %>%filter(grepl('Crime',genres))
+s.cdyCrime$genres <- 'C.Crime'
+dummy.0 <- dummy.0 %>%filter(!grepl('Crime',genres))
+
+s.cdyRomance <- dummy.0 %>%filter(grepl('Romance',genres))
+s.cdyRomance$genres <- 'C.Romance'
+dummy.0 <- dummy.0 %>%filter(!grepl('Romance',genres))
+
+s.cdyAdventur <- dummy.0 %>%filter(grepl('Adventure',genres))
+s.cdyAdventur$genres <- 'C.Adventur'
+dummy.0 <- dummy.0 %>%filter(!grepl('Adventure',genres))
+
+s.cdyActnFamly <- dummy.0 %>%filter(grepl('Action|Family',genres))
+s.cdyActnFamly$genres <- 'C.ActnFamly'
+dummy.0 <- dummy.0 %>%filter(!grepl('Action|Family',genres))
+
+s.cdyHorror <- dummy.0 %>%filter(grepl('Horror',genres))
+s.cdyHorror$genres <- 'C.Horror'
+dummy.0 <- dummy.0 %>%filter(!grepl('Horror',genres))
+
+
+# s.cdyDrama <- dummy.0 %>%filter(grepl('Drama',genres))
+# s.cdyDrama$genres <- 'C.Drama'
+# s.cdy <- dummy.0 %>%filter(!grepl('Drama',genres))
+s.cdy<-dummy.0
+s.cdy$genres <- 'Comedy'
+
+# s.cdyDraFamSciFanMus <- rbind(s.cdyDrama,s.cdyFamSciFiFanMusic)
+# s.cdyDraFamSciFanMus$genres <- 'C.DraFamSciFiFanMusic'
+
+s.comedyGrp <- rbind(s.cdyActnFamly,
+                     s.cdyAdventur,
+                     s.cdyCrime,
+                     s.cdyDrama,
+                     s.cdyHorror,
+                     s.cdyRomance,
+                     s.cdy)
+
+s.comedyGrp$genres <- as.factor(s.comedyGrp$genres)
+
+dummy.0 <- s.comedyGrp %>% count(genres, sort = TRUE)
+par(mar = c(10,4,2,2))
+plot(dummy.0$genres,
+     dummy.0$n,
+     las = 2,
+     xlab = '',
+     ylab = '',
+     cex.axis = 0.8)
+
+
+dummy.2 <- s.comedyGrp %>% count(genres, sort = TRUE)
+
+
+par(mar = c(6,5,2,2))
+dummy.1 <-barplot(sort(dummy.2$n, decreasing = TRUE),
+                  names.arg = dummy.0$genre,
+                  las = 2, # 2: always perpendicular to the axis,
+                  ylab = '',
+                  xlab = '',
+                  col = c('cornsilk','cornsilk',
+                          'azure','azure','azure','azure','azure'),
+                  main = 'comedy subgroup[aggregated] by count')
+text(dummy.1, 0, 
+     sort(dummy.2$n, decreasing = TRUE),
+     cex=0.8,
+     pos=3) 
+text(x= 3,
+     y= 5000,
+     cex = 0.8,
+     col = 'darkcyan',
+     pos = 4,
+     labels= "next: SMOTE - oversample minority classes")
+
+
+plot(s.comedyGrp$genres,
+     s.comedyGrp$averageRating,
+     cex.axis = 0.8,
+     xlab = '',
+     ylab = 'avgRating',
+     main = 'avgRating by aggregated comedy genres',
+     col = c('cornsilk', 'darkblue','darkcyan', 'palevioletred4'),
+     las = 2)
+abline(h=7,
+       lty = 'longdash')
+abline(h=4,
+       lty = 'longdash')
+```
+
+### factor up Directors and Writers
+
+```{r factorComedyDirWriter}
+
+s.comedyGrp <- s.comedyGrp[s.comedyGrp$directors != '\\N',]
+s.comedyGrp <- s.comedyGrp[s.comedyGrp$writers != '\\N',]
+
+dummy.2 <- s.comedyGrp %>% count(directors, sort = TRUE)
+dummy.1<- hist(dummy.2$n,
+               main = 'Freq of movies directed by directors',
+               xlab = '')
+text(dummy.1$mids,1500,
+     dummy.1$counts,
+     col = 'darkcyan',
+     cex = 0.8)
+summary(dummy.2)
+unique(dummy.2$n)
+
+dummy.0 <- NA
+dummy.0[dummy.2$n >= 7] <- 'high7'
+dummy.0[(dummy.2$n < 7) & (dummy.2$n >=4)] <- 'mid4to6'
+dummy.0[(dummy.2$n < 4) & (dummy.2$n >=1)] <- 'low1to3'
+dummy.0 <- as.factor(dummy.0)
+dummy.2 <-cbind(dummy.2,dummy.0)
+colnames(dummy.2) <- c('directors','n','lvl')
+
+s.comedyGrp$directors <- factor(s.comedyGrp$directors, 
+                            levels=dummy.2$directors, 
+                            labels=dummy.2$lvl)
+
+
+dummy.2 <- s.comedyGrp %>% count(writers, sort = TRUE)
+dummy.1<- hist(dummy.2$n,
+               main = 'Freq of scripts written by writers',
+               xlab = '')
+text(dummy.1$mids,1500,
+     dummy.1$counts,
+     col = 'darkcyan',
+     cex = 0.5)
+summary(dummy.2)
+unique(dummy.2$n)
+
+dummy.0 <- NA
+dummy.0[dummy.2$n >= 10] <- 'high10'
+dummy.0[(dummy.2$n < 10) & (dummy.2$n >=4)] <- 'mid47'
+dummy.0[(dummy.2$n < 4) & (dummy.2$n >=1)] <- 'low123'
+dummy.0 <- as.factor(dummy.0)
+dummy.2 <-cbind(dummy.2,dummy.0)
+colnames(dummy.2) <- c('writers','n','lvl')
+
+s.comedyGrp$writers <- factor(s.comedyGrp$writers, 
+                            levels=dummy.2$writers, 
+                            labels=dummy.2$lvl)
+
+```
+
+### factor up runtime, startyear, elim tconst, title\*
+
+```{r comedyFactorUp}
+
+dummy.0 <- s.comedyGrp$runtimeMinutes
+dummy.1 <- hist(as.numeric(dummy.0),
+                col = c('cornsilk','cornsilk','cornsilk','cornsilk',
+                        'cornsilk','cornsilk','cornsilk','cornsilk',
+                        'cornsilk','cornsilk','cornsilk','cornsilk',
+                        'cornsilk','cornsilk','cornsilk','cornsilk',
+                        'azure','azure','azure','azure',
+                        'azure','cornsilk','cornsilk'),
+                main = 'distribution of comedy runtimes',
+                xlab = 'minutes')
+text(dummy.1$mids,400,
+     dummy.1$counts,
+     cex = 0.5)
+text(60, 2000,
+     pos = 4,
+     col = 'darkcyan',
+     'aggregate\nshort:55-85\nmidLo:86-90 midHi:91-94\nLong: >95')
+
+dummy.1 <- NA
+dummy.1[dummy.0 >= 94] <- 'Long94'
+dummy.1[(dummy.0 >= 90) & (dummy.0 < 94)] <- 'midHi93'
+dummy.1[(dummy.0 >= 86) & (dummy.0 < 90)] <- 'midLo86'
+dummy.1[(dummy.0 >= 55) & (dummy.0 < 86)] <- 'short55'
+
+
+
+s.comedyGrp$runtimeMinutes <- as.factor(dummy.1)
+dummy.1 <- plot(s.comedyGrp$runtimeMinutes,
+                main = 'distribution of aggregated comedy runtimes',
+                xlab = 'minutes',
+                col = 'cornsilk')
+
+
+```
+
+### Clean Ratings
+
+```{r comedyCleanRatings}
+
+
+dummy.0<-NULL
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=1,]
+dummy.1 <- dummy.1[dummy.1$averageRating <2,]
+dummy.1$averageRating <- 1
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=2,]
+dummy.1 <- dummy.1[dummy.1$averageRating <3,]
+dummy.1$averageRating <- 2
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=3,]
+dummy.1 <- dummy.1[dummy.1$averageRating <4,]
+dummy.1$averageRating <- 3
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=4,]
+dummy.1 <- dummy.1[dummy.1$averageRating <5,]
+dummy.1$averageRating <- 4
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=5,]
+dummy.1 <- dummy.1[dummy.1$averageRating <6,]
+dummy.1$averageRating <- 5
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=6,]
+dummy.1 <- dummy.1[dummy.1$averageRating <7,]
+dummy.1$averageRating <- 6
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=7,]
+dummy.1 <- dummy.1[dummy.1$averageRating <8,]
+dummy.1$averageRating <- 7
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=8,]
+dummy.1 <- dummy.1[dummy.1$averageRating <9,]
+dummy.1$averageRating <- 8
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.1 <- s.comedyGrp[s.comedyGrp$averageRating >=9,]
+dummy.1$averageRating <- 9
+dummy.0<- rbind(dummy.0,
+                dummy.1)
+
+dummy.0$averageRating <- as.factor(dummy.0$averageRating)
+
+s.comedyGrp <- dummy.0
+
+
+dummy.2 <- s.comedyGrp %>% count(genres, sort = TRUE)
+dummy.2<- dummy.2[1:15,]
+dummy.1<- order(-dummy.2$n)
+dummy.2<-dummy.2[dummy.1,]
+
+par(mar = c(12,5,2,2))
+plot(dummy.2$genres,
+     dummy.2$n,
+     las = 2, # 2: always perpendicular to the axis,
+     main = 'comedy subgroup by count')
+
+dummy.2 <- s.comedyGrp %>% count(genres, numVotes, sort = TRUE)
+
+par(mar = c(8,7,2,2))
+plot(dummy.2$genres,
+     dummy.2$numVotes,
+     ylab = 'numVotes',
+     xlab = 'subgenre',
+     cex.axis = 0.8,
+     las = 2, # 2: always perpendicular to the axis,
+     main = 'numVotes by Comedy subgenre')
+abline(h=400000,
+       col = 'blue')
+text(x= 2, 
+     y= 700000,
+     cex = 0.8,
+     col = 'blue',
+     pos = 4,
+     labels= "Decision Trees resilient to outliers")
+
+
+
+dummy.2 <- s.comedyGrp %>% count(directors, sort = TRUE)
+
+plot(dummy.2,
+     xlab = '',
+     ylab = '',
+     cex.axis = 0.8,
+     main = 'no of films directed')
+
+dummy.2 <- s.comedyGrp %>% count(writers, sort = TRUE)
+
+plot(dummy.2,
+     xlab = '',
+     ylab = '',
+     cex.axis = 0.8,
+     main = 'no of films scripted for')
+
+dummy.2 <- s.comedyGrp %>% count(averageRating, sort = TRUE)
+
+
+plot(dummy.2$averageRating,
+     dummy.2$n,
+     col = 'darkblue',
+     xlab = '',
+     ylab = '',
+     cex.axis = 0.8,
+     main = 'count of average rating')
+
+
+s.final <- s.comedyGrp[,c(6:10)]
+
+```
+
+## SMOTE
+
+```{r smote.setup}
+
+library(DMwR)
+
+```
+
+```{r smote.do}
+
+# s.balCmdyGrp <- SMOTE(genres~., s.final, perc.over = 600, k = 5, perc.under = 200)
+set.seed(1234)
+s.balCmdyGrp <- SMOTE(averageRating~., s.final, perc.over = 100, k = 5, perc.under = 2400)
+
+```
+
+## final balset
+
+```{r smoteResult}
+
+
+par(mfrow = c(2,2))
+plot(s.balCmdyGrp$averageRating~s.balCmdyGrp$runtimeMinutes,
+     ylab = 'avgRating',
+     xlab = 'runtimeMinutes',
+     main = 'runtime[Comedy] vs averageRating')
+
+plot(s.balCmdyGrp$averageRating~s.balCmdyGrp$genres,
+     ylab = 'avgRating',
+     xlab = 'genre',
+     main = 'genre[comedy] vs averageRating')
+
+plot(s.balCmdyGrp$averageRating~s.balCmdyGrp$directors,
+     ylab = 'avgRating',
+     xlab = 'directors',
+     main = 'directors[comedy] vs averageRating')
+
+plot(s.balCmdyGrp$averageRating~s.balCmdyGrp$writers,
+     ylab = 'avgRating',
+     xlab = 'writers',
+     main = 'writers[comedy] vs averageRating')
+
+
+
+```
+
+## VS balset
+
+```{r VSbalset}
+
+dummy <- sample(1:nrow(s.balCmdyGrp),
+                round(nrow(s.balCmdyGrp)*0.2,0), 
+                replace=F)
+testDF <- s.balCmdyGrp[dummy,]
+trainDF <- s.balCmdyGrp[-dummy,]
+
+model.Tree <- rpart(
+  averageRating ~ ., 
+  data = trainDF, 
+  control=rpart.control(minsplit=5, minbucket=5, cp=0.002),
+  #minsplit = 2, # minimum number of observations for split
+  #minbucket = 1, # the minimum number of observations in any terminal node
+  method = "class" 
+)
+
+# reference
+# https://www.rdocumentation.org/packages/rpart.plot/versions/1.4-3/topics/rpart.plot
+
+rpart.plot(model.Tree, 
+           type = 0, # label all nodes
+           extra = FALSE, # put extra info
+           tweak = 1.2, # makes text bigger
+           compress = TRUE, # shift nodes where there is space
+           branch =1, # v shaped branch lines
+           box.palette = 'cornsilk',
+           varlen = -1,
+           faclen = 7,
+           fallen.leaves = FALSE,
+           #clip.facs = TRUE,
+           uniform = TRUE # uniform vertical spacing
+           ) 
+
+plotcp(model.Tree, minline = TRUE)
+
+```
+
+## Test SMOTE
+
+```{r testSMOTE}
+
+
+
+
+predicted <- predict(model.Tree, 
+                     testDF, 
+                     type="class")
+
+conMatrix <- table(testDF$averageRating, predicted)
+
+conMatrix
+
+TP <- 3+18+15+0+6
+FP <- (1+3+6+2)+(1+7+8+18+11+4+4)+(1+1)+(1+2+5+2+3+1)
+Accuracy <- TP/(TP + FP)
+missclassRate <- FP/(TP + FP)
+print('only TP and FP available')
+print(paste('TP: ', round(TP,3), 
+            'FP: ', round(FP,3)))
+print(paste('Accuracy: ', round(TP/(TP + FP),5)))
+
+
+```
+
+## Final dataset
+
+```{r finDataset}
+
+summary(s.balCmdyGrp)
+
+
+plot(table(s.balCmdyGrp$runtimeMinutes, s.balCmdyGrp$averageRating),
+     main = 'average rating vs runtime-Minutes',
+     ylab = 'avg rating',
+     col = 'darkcyan',
+     cex.axis = 1
+     )
+
+plot(table(s.balCmdyGrp$genre, s.balCmdyGrp$averageRating),
+     main = 'average rating vs genre',
+     ylab = 'avg rating',
+     col = 'cornsilk3',
+     cex.axis = 0.7
+     )
+
+
+plot(table(s.balCmdyGrp$directors, s.balCmdyGrp$averageRating),
+     main = 'average rating vs directors[no films directed]',
+     ylab = 'avg rating',
+     col = 'darkgoldenrod',
+     cex.axis = 0.7
+     )
+
+par(mar=c(0.5,3,3,1))
+plot(table(s.balCmdyGrp$writers, s.balCmdyGrp$averageRating),
+     main = 'average rating vs writers[no. scripts]',
+     ylab = 'avg rating',
+     col = 'aquamarine3',
+     las = 2,
+     cex.axis = 0.7
+     )
+
+```
+
+## CV balset
+
+```{r CVsDotfinal}
+
+
+
+set.seed(1234)
+cvIdx = createDataPartition(s.balCmdyGrp$averageRating, p = 0.80, list = FALSE)
+trainDF = s.balCmdyGrp[cvIdx, ]
+testDF = s.balCmdyGrp[-cvIdx, ]
+
+tree.validate = train(
+  form = averageRating ~ .,
+  data = trainDF,
+  trControl = trainControl(method = "cv", number = 10),
+  method = "rpart"
+)
+
+tree.validate
+
+
+tree.validate$results
+
+
+rpart.plot(tree.validate$finalModel, 
+           type = 2, # label all nodes
+           extra = TRUE, # put extra info
+           tweak = 0.8, # makes text bigger
+           box.palette = 'cornsilk',
+           compress = TRUE, # shift nodes where there is space
+           branch =1, # v shaped branch lines
+           uniform = TRUE # uniform vertical spacing
+           )
+
+
+```
